@@ -1,0 +1,491 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bee Swarm Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #87CEEB;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        #gameCanvas {
+            border: 1px solid black;
+            background-color: #7CFC00;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #shopContainer {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .shop {
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #beeList {
+            position: absolute;
+            top: 150px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <p>Pollen: <span id="pollen">0</span> / <span id="maxPollen">100</span></p>
+            <p>Honey: <span id="honey">0</span></p>
+            <p>Tool: <span id="tool">Scooper</span></p>
+            <p>Container: <span id="container">Pouch</span></p>
+            <p>Bees: <span id="beeCount">1</span></p>
+        </div>
+        <div id="shopContainer">
+            <div class="shop" id="toolshop">
+                <h3>Tool Shop</h3>
+                <button id="buyRakeBtn">Buy Rake (Cost: 50 honey)</button><br>
+                <button id="buyScytheBtn">Buy Scythe (Cost: 150 honey)</button><br>
+                <button id="buyPorcelainDipperBtn">Buy Porcelain Dipper (Cost: 1000 honey)</button>
+            </div>
+            <div class="shop" id="containershop">
+                <h3>Container Shop</h3>
+                <button id="buyBackpackBtn">Buy Backpack (Cost: 50 honey)</button><br>
+                <button id="buyPortOHiveBtn">Buy Port-O-Hive (Cost: 300 honey)</button><br>
+                <button id="buyPorcelainPortOHiveBtn">Buy Porcelain Port-O-Hive (Cost: 1500 honey)</button>
+            </div>
+            <div class="shop" id="beeshop">
+                <h3>Bee Shop</h3>
+                <button id="buyBeeBtn">Buy Bee (Cost: 100 honey)</button>
+            </div>
+        </div>
+        <div id="beeList">
+            <h3>Your Bees:</h3>
+            <ul id="beesOwned"></ul>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const pollenElement = document.getElementById('pollen');
+        const maxPollenElement = document.getElementById('maxPollen');
+        const honeyElement = document.getElementById('honey');
+        const toolElement = document.getElementById('tool');
+        const containerElement = document.getElementById('container');
+        const beeCountElement = document.getElementById('beeCount');
+        const beesOwnedElement = document.getElementById('beesOwned');
+
+        const buyRakeBtn = document.getElementById('buyRakeBtn');
+        const buyScytheBtn = document.getElementById('buyScytheBtn');
+        const buyPorcelainDipperBtn = document.getElementById('buyPorcelainDipperBtn');
+        const buyBackpackBtn = document.getElementById('buyBackpackBtn');
+        const buyPortOHiveBtn = document.getElementById('buyPortOHiveBtn');
+        const buyPorcelainPortOHiveBtn = document.getElementById('buyPorcelainPortOHiveBtn');
+        const buyBeeBtn = document.getElementById('buyBeeBtn');
+
+        let mouseX = 0;
+        let mouseY = 0;
+        let pollen = 0;
+        let honey = 0;
+        let toolBonus = 1;
+        let equippedTool = 'Scooper';
+        let equippedContainer = 'Pouch';
+
+        // Pollen container system
+        const pollenContainer = {
+            capacity: 100,
+            current: 0
+        };
+
+        class Bee {
+            constructor(x, y, species) {
+                this.x = x;
+                this.y = y;
+                this.species = species;
+                this.size = 10;
+                this.speed = 2 + Math.random() * 2;
+                this.pollenCapacity = 10; // Amount of pollen this bee can hold
+                this.currentPollen = 0;
+                this.targetFlower = null; // Initialize targetFlower
+                this.lockedOn = false; // To track if bee is locked on
+                this.abilityActive = false; // To track if ability is active
+            }
+
+            draw() {
+                ctx.fillStyle = this.species.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.stroke();
+            }
+
+            update() {
+                if (this.lockedOn) {
+                    this.collectPollen();
+                } else {
+                    this.followMouse();
+                    this.findFlower(); // Find a flower to target
+                }
+            }
+
+            followMouse() {
+                const dx = mouseX - this.x;
+                const dy = mouseY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Adjust movement speed and prevent locking if too far from mouse
+                if (distance > this.speed) {
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+            }
+
+            findFlower() {
+                const nearbyFlower = findNearbyFlower(this.x, this.y, 50); // Look for a nearby flower
+                if (nearbyFlower) {
+                    this.targetFlower = nearbyFlower;
+                    this.lockedOn = true; // Lock onto the flower
+                }
+            }
+
+            collectPollen() {
+                if (this.targetFlower && this.currentPollen < this.pollenCapacity) {
+                    const collectedPollen = this.targetFlower.collectPollen(this.pollenCapacity - this.currentPollen);
+                    this.currentPollen += collectedPollen;
+
+                    // Update pollen in UI
+                    updateUI();
+
+                    // Activate ability if there's a token
+                    if (this.abilityActive) {
+                        this.activateAbility();
+                    }
+                }
+
+                // If current pollen exceeds container capacity, return to hive
+                if (this.currentPollen >= this.pollenCapacity) {
+                    this.returnToHive();
+                }
+            }
+
+            returnToHive() {
+                const hiveX = hive.x;
+                const hiveY = hive.y;
+                const dx = hiveX - this.x;
+                const dy = hiveY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Move towards the hive if not already there
+                if (distance > this.speed) {
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                } else {
+                    // Convert a portion of pollen into honey at the hive (50%)
+                    const portionToConvert = Math.floor(this.currentPollen * 0.5);
+                    honey += portionToConvert;
+                    pollenContainer.current += portionToConvert; // Add converted pollen to the container
+                    this.currentPollen -= portionToConvert;
+                    updateUI();
+                    this.lockedOn = false; // Unlock from flower after returning to hive
+                    this.targetFlower = null; // Clear the target flower
+                }
+            }
+
+            activateAbility() {
+                switch (this.species.ability) {
+                    case "Precise Mark":
+                        // Example ability that increases pollen collection efficiency
+                        this.currentPollen += Math.floor(this.currentPollen * 0.2); // Boost collection
+                        break;
+                    case "Fuzzy Boost":
+                        this.speed += 1; // Boost speed temporarily
+                        break;
+                    case "Spicy Conversion":
+                        this.currentPollen = Math.min(this.currentPollen + 5, this.pollenCapacity); // Add a little more pollen
+                        break;
+                    case "Vector Speed":
+                        this.speed += 0.5; // Boost speed slightly
+                        break;
+                }
+                this.abilityActive = false; // Reset ability status
+            }
+        }
+
+        const hive = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 20,
+            draw() {
+                ctx.fillStyle = 'brown';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.stroke();
+            }
+        };
+
+        class Flower {
+            constructor(x, y, size) {
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.pollen = Math.floor(Math.random() * 100); // Random initial pollen
+                this.saturationCount = 0; // Number of times collected
+                this.saturationLimit = 5; // Limit before saturation
+                this.cooldown = 0; // Cooldown timer
+                this.cooldownTime = 5000; // Cooldown duration in ms
+            }
+
+            draw() {
+                ctx.fillStyle = this.getColor(); // Get color based on saturation
+                ctx.beginPath();
+                ctx.arc(this.x + this.size / 2, this.y + this.size / 2, this.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            getColor() {
+                // Change color based on saturation
+                if (this.saturationCount < 1) return 'red';
+                if (this.saturationCount < 3) return 'orange';
+                if (this.saturationCount < this.saturationLimit) return 'yellow';
+                return 'gray'; // Flower is saturated
+            }
+
+            collectPollen(amount) {
+                if (this.saturationCount < this.saturationLimit) {
+                    if (this.pollen > 0) {
+                        const collected = Math.min(amount, this.pollen);
+                        this.pollen -= collected;
+                        this.saturationCount++;
+
+                        // Check if flower is saturated and start cooldown
+                        if (this.saturationCount >= this.saturationLimit) {
+                            this.startCooldown();
+                        }
+                        return collected; // Return amount collected
+                    }
+                } else {
+                    // If flower is in cooldown, return 0
+                    return 0;
+                }
+            }
+
+            startCooldown() {
+                this.cooldown = this.cooldownTime; // Set cooldown
+                setTimeout(() => {
+                    this.resetSaturation(); // Reset saturation after cooldown
+                }, this.cooldownTime);
+            }
+
+            resetSaturation() {
+                this.saturationCount = 0; // Reset saturation count
+            }
+
+            update() {
+                // Update flower behavior (if needed)
+            }
+        }
+
+        const flowers = [];
+        for (let i = 0; i < 10; i++) {
+            const size = 10 + Math.random() * 20;
+            flowers.push(new Flower(Math.random() * (canvas.width - size), Math.random() * (canvas.height - size), size));
+        }
+
+        const bees = [];
+
+        const beeSpecies = [
+            { name: "Basic Bee", color: "yellow", ability: "None" },
+            { name: "Brave Bee", color: "blue", ability: "Precise Mark" },
+            { name: "Bomber Bee", color: "red", ability: "Fuzzy Boost" },
+            { name: "Photon Bee", color: "purple", ability: "Spicy Conversion" },
+            { name: "Precise Bee", color: "green", ability: "Precise Mark" },
+            { name: "Fuzzy Bee", color: "pink", ability: "Fuzzy Boost" },
+            { name: "Spicy Bee", color: "orange", ability: "Spicy Conversion" },
+            { name: "Vector Bee", color: "cyan", ability: "Vector Speed" },
+        ];
+
+        // Start the game with one Basic Bee
+        function startGame() {
+            const startingBee = new Bee(hive.x, hive.y, beeSpecies[0]); // Start with Basic Bee
+            bees.push(startingBee);
+            updateBeeList(); // Update the bee list UI
+            updateUI();
+        }
+
+        let abilityTokens = []; // Array to store ability tokens
+
+        function spawnAbilityToken(x, y) {
+            const radius = 20; // Radius in which ability tokens will spawn
+            const token = {
+                x: x + (Math.random() - 0.5) * radius,
+                y: y + (Math.random() - 0.5) * radius,
+                size: 5,
+                draw() {
+                    ctx.fillStyle = 'gold';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            };
+            abilityTokens.push(token); // Add to the ability tokens array
+        }
+
+        function findNearbyFlower(x, y, radius) {
+            const nearbyFlowers = flowers.filter(f =>
+                Math.hypot(f.x + f.size / 2 - x, f.y + f.size / 2 - y) < radius && f.pollen > 0
+            );
+            return nearbyFlowers.length > 0 ? nearbyFlowers[0] : null;
+        }
+
+        function updateUI() {
+            pollenElement.textContent = Math.floor(pollenContainer.current);
+            maxPollenElement.textContent = pollenContainer.capacity;
+            honeyElement.textContent = Math.floor(honey);
+            toolElement.textContent = equippedTool;
+            containerElement.textContent = equippedContainer;
+            beeCountElement.textContent = bees.length; // Update bee count
+        }
+
+        function updateBeeList() {
+            beesOwnedElement.innerHTML = ''; // Clear the current list
+            bees.forEach(bee => {
+                const li = document.createElement('li');
+                li.textContent = `${bee.species.name} - ${bee.species.ability}`;
+                beesOwnedElement.appendChild(li); // Add each bee to the list
+            });
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hive.draw();
+            flowers.forEach(flower => {
+                flower.update();
+                flower.draw();
+            });
+            bees.forEach(bee => {
+                bee.update();
+                bee.draw();
+            });
+            abilityTokens.forEach(token => token.draw()); // Draw ability tokens
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Tool and container shop functionality
+        buyRakeBtn.addEventListener('click', () => {
+            if (honey >= 50) {
+                honey -= 50;
+                toolBonus = 2;
+                equippedTool = 'Rake';
+                toolElement.textContent = 'Rake';
+                updateUI();
+            }
+        });
+
+        buyScytheBtn.addEventListener('click', () => {
+            if (honey >= 150) {
+                honey -= 150;
+                toolBonus = 3;
+                equippedTool = 'Scythe';
+                toolElement.textContent = 'Scythe';
+                updateUI();
+            }
+        });
+
+        buyPorcelainDipperBtn.addEventListener('click', () => {
+            if (honey >= 1000) {
+                honey -= 1000;
+                toolBonus = 5;
+                equippedTool = 'Porcelain Dipper';
+                toolElement.textContent = 'Porcelain Dipper';
+                updateUI();
+            }
+        });
+
+        buyBackpackBtn.addEventListener('click', () => {
+            if (honey >= 50) {
+                honey -= 50;
+                pollenContainer.capacity = 200;
+                equippedContainer = 'Backpack';
+                containerElement.textContent = 'Backpack';
+                updateUI();
+            }
+        });
+
+        buyPortOHiveBtn.addEventListener('click', () => {
+            if (honey >= 300) {
+                honey -= 300;
+                pollenContainer.capacity = 500;
+                equippedContainer = 'Port-O-Hive';
+                containerElement.textContent = 'Port-O-Hive';
+                updateUI();
+            }
+        });
+
+        buyPorcelainPortOHiveBtn.addEventListener('click', () => {
+            if (honey >= 1500) {
+                honey -= 1500;
+                pollenContainer.capacity = 1000;
+                equippedContainer = 'Porcelain Port-O-Hive';
+                containerElement.textContent = 'Porcelain Port-O-Hive';
+                updateUI();
+            }
+        });
+
+        // Bee purchasing functionality
+        buyBeeBtn.addEventListener('click', () => {
+            if (honey >= 100) {
+                honey -= 100;
+                const randomBeeType = beeSpecies[Math.floor(Math.random() * beeSpecies.length)];
+                const newBee = new Bee(hive.x, hive.y, randomBeeType); // Create a new bee
+                bees.push(newBee); // Add the new bee to the array
+                updateBeeList(); // Update the bee list UI
+                updateUI();
+            }
+        });
+
+        // Clicking to collect pollen
+        canvas.addEventListener('click', () => {
+            if (pollenContainer.current < pollenContainer.capacity) {
+                pollen += toolBonus; // Increase pollen by tool bonus
+                pollenContainer.current += toolBonus;
+                updateUI();
+            }
+        });
+
+        // Mouse move event
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = event.clientX - rect.left;
+            mouseY = event.clientY - rect.top;
+        });
+
+        startGame(); // Start the game with one bee
+        gameLoop(); // Start the game loop
+    </script>
+</body>
+</html> -->
