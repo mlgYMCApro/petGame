@@ -1,0 +1,18 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Deploy to GitHub Pages
+        uses: gh-pages/deploy@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          deploy_branch: main
